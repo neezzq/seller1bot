@@ -11,7 +11,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # --- КОНФИГУРАЦИЯ ---
 API_TOKEN = '8286778160:AAHftyjLgM4cgjXovY2LMCwPbpfeHW0-vig'
-ADMIN_IDS = [8141992001, 1825486156]
+ADMIN_IDS = [8141992001, 1825486156, 5639348899]
 SUPPORT_URL = "tg://resolve?domain=sellerblume"
 
 # Настройки по умолчанию
