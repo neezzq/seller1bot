@@ -1,8 +1,10 @@
+
 import logging
 import asyncio
 import os
 import json
 import time
+import html
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -14,6 +16,7 @@ API_TOKEN = '8732609892:AAEre0vM4ktZGTMejTuhcWIy6cGmGvjqn34'
 ADMIN_IDS = [8141992001, 1825486156, 5639348899]
 SUPPORT_URL = "tg://resolve?domain=sellerblume"
 
+# Premium emoji для inline-кнопок
 EMOJI_IDS = {
     "buy_uah": "5445118241758257251",
     "buy_rub": "5398017006165305287",
@@ -41,11 +44,39 @@ EMOJI_IDS = {
     "set_rub_comm": "5398017006165305287",
 }
 
+# Premium emoji для сообщений
+# Заполняй только ID. Если строка пустая, покажется обычный emoji fallback.
+MESSAGE_EMOJI_IDS = {
+    "hello": "5343984088493599366 ",
+    "down": "5426930451124081962",
+    "wait": "5316977222467206948",
+    "diamond": "5377620962390857342",
+    "chart": "5231200819986047254",
+    "warn": "5447644880824181073",
+    "error": "5210952531676504517",
+    "money": "5427239431071358081",
+    "card": "5445353829304387411",
+    "bank": "5332455502917949981",
+    "person": "5373012449597335010",
+    "phone": "5407025283456835913",
+    "rocket": "5195033767969839232",
+    "comment": "5426839801544338121",
+    "inbox": "5433811242135331842",
+    "time": "5382194935057372936",
+    "gift": "5330312778093704176",
+    "signal": "5193177581888755275",
+    "tools": "5294171783644061342",
+    "ok": "5316827280863934685",
+    "flag_uah": "5445118241758257251",
+    "flag_rub": "5398017006165305287",
+    "bell": "5458603043203327669",
+}
+
 # Глобальные настройки
 settings = {
     "uah_rate": 45.0, "rub_rate": 105.0,
     "uah_margin": 10.0, "rub_margin": 15.0,
-    "min_buy": 1.5,  # Твоя минималка по умолчанию
+    "min_buy": 1.5,
     "uah_card": "0000 0000 0000 0000", "uah_bank": "Monobank", "uah_name": "Ivan I.", "uah_comm": "На річницю",
     "rub_phone": "+79000000000", "rub_bank": "Sberbank (SBP)", "rub_name": "Ivan I.", "rub_comm": "На годовщину"
 }
@@ -53,6 +84,10 @@ settings = {
 last_order_time = {}
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
+
+
+def h(value):
+    return html.escape(str(value))
 
 
 def ikb_button(text, *, callback_data=None, url=None, emoji_key=None):
@@ -68,6 +103,13 @@ def ikb_button(text, *, callback_data=None, url=None, emoji_key=None):
         kwargs["icon_custom_emoji_id"] = emoji_id
 
     return InlineKeyboardButton(**kwargs)
+
+
+def me(key: str, fallback_emoji: str) -> str:
+    emoji_id = MESSAGE_EMOJI_IDS.get(key, "")
+    if emoji_id:
+        return f'<tg-emoji emoji-id="{emoji_id}">{fallback_emoji}</tg-emoji>'
+    return fallback_emoji
 
 
 # --- СТАТИСТИКА ---
@@ -130,11 +172,15 @@ async def cmd_start(event: types.Message | types.CallbackQuery, state: FSMContex
         [ikb_button("Поддержка", url=SUPPORT_URL, emoji_key="support")]
     ])
 
-    text = "👋 Добро пожаловать в **Seller TON**!\n\nВыберите валюту оплаты ниже: 👇"
+    text = (
+        f"{me('hello', '👋')} Добро пожаловать в <b>Seller TON</b>!\n\n"
+        f"Выберите валюту оплаты ниже: {me('down', '👇')}"
+    )
+
     if isinstance(event, types.Message):
-        await event.answer(text, reply_markup=kb, parse_mode="Markdown")
+        await event.answer(text, reply_markup=kb, parse_mode="HTML")
     else:
-        await event.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+        await event.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
 
 
 @dp.callback_query(F.data.startswith("buy_"))
@@ -153,14 +199,19 @@ async def process_buy(callback: types.CallbackQuery, state: FSMContext):
     await state.update_data(currency=curr, final_rate=final_rate)
     last_order_time[user_id] = curr_t
 
+    text = (
+        f"{me('diamond', '💎')} Покупка TON за {h(curr)}\n"
+        f"{me('chart', '📊')} Курс: {h(final_rate)} {h(curr)}/TON\n\n"
+        f"{me('warn', '⚠️')} Минимальная покупка: <b>{h(settings['min_buy'])} TON</b>\n\n"
+        f"Введите количество TON:"
+    )
+
     await callback.message.edit_text(
-        f"💎 Покупка TON за {curr}\n📊 Курс: {final_rate} {curr}/TON\n\n"
-        f"⚠️ Минимальная покупка: **{settings['min_buy']} TON**\n\n"
-        f"Введите количество TON:",
+        text,
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [ikb_button("Назад", callback_data="start", emoji_key="back")]
         ]),
-        parse_mode="Markdown"
+        parse_mode="HTML"
     )
     await state.set_state(Order.entering_amount)
 
@@ -171,8 +222,8 @@ async def amount_step(message: types.Message, state: FSMContext):
         amount = float(message.text.replace(",", "."))
         if amount < settings["min_buy"]:
             return await message.answer(
-                f"❌ Минимальная сумма покупки — **{settings['min_buy']} TON**.\nВведите сумму побольше:",
-                parse_mode="Markdown"
+                f"{me('error', '❌')} Минимальная сумма покупки — <b>{h(settings['min_buy'])} TON</b>.\nВведите сумму побольше:",
+                parse_mode="HTML"
             )
 
         data = await state.get_data()
@@ -180,14 +231,15 @@ async def amount_step(message: types.Message, state: FSMContext):
         await state.update_data(amount=amount, total_cost=total)
 
         await message.answer(
-            f"💰 К оплате: {total} {data['currency']}\nВведите ваш TON кошелек:",
+            f"{me('money', '💰')} К оплате: {h(total)} {h(data['currency'])}\nВведите ваш TON кошелек:",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [ikb_button("Назад", callback_data="start", emoji_key="back")]
-            ])
+            ]),
+            parse_mode="HTML"
         )
         await state.set_state(Order.entering_wallet)
     except Exception:
-        await message.answer("⚠️ Введите число.")
+        await message.answer(f"{me('warn', '⚠️')} Введите число.", parse_mode="HTML")
 
 
 @dp.message(Order.entering_wallet)
@@ -196,41 +248,56 @@ async def wallet_step(message: types.Message, state: FSMContext):
     data = await state.get_data()
 
     if data["currency"] == "UAH":
-        reqs = f"💳 Карта: `{settings['uah_card']}`\n🏦 Банк: {settings['uah_bank']}\n👤 Получатель: {settings['uah_name']}"
+        reqs = (
+            f"{me('card', '💳')} Карта: <code>{h(settings['uah_card'])}</code>\n"
+            f"{me('bank', '🏦')} Банк: {h(settings['uah_bank'])}\n"
+            f"{me('person', '👤')} Получатель: {h(settings['uah_name'])}"
+        )
         comment = settings["uah_comm"]
     else:
-        reqs = f"📱 Номер (СБП): `{settings['rub_phone']}`\n🏦 Банк: {settings['rub_bank']}\n👤 Получатель: {settings['rub_name']}"
+        reqs = (
+            f"{me('phone', '📱')} Номер (СБП): <code>{h(settings['rub_phone'])}</code>\n"
+            f"{me('bank', '🏦')} Банк: {h(settings['rub_bank'])}\n"
+            f"{me('person', '👤')} Получатель: {h(settings['rub_name'])}"
+        )
         comment = settings["rub_comm"]
 
     text = (
-        f"🚀 **ЗАЯВКА СФОРМИРОВАНА**\n\n"
-        f"Сумма: `{data['total_cost']} {data['currency']}`\n\n{reqs}\n\n"
-        f"💬 **КОММЕНТАРИЙ:** `{comment}`\n\n"
-        f"⚠️ **БЕЗ КОММЕНТАРИЯ TON НЕ ПРИДУТ!**\n\n"
-        f"Нажмите кнопку после оплаты: 👇"
+        f"{me('rocket', '🚀')} <b>ЗАЯВКА СФОРМИРОВАНА</b>\n\n"
+        f"Сумма: <code>{h(data['total_cost'])} {h(data['currency'])}</code>\n\n"
+        f"{reqs}\n\n"
+        f"{me('comment', '💬')} <b>КОММЕНТАРИЙ:</b> <code>{h(comment)}</code>\n\n"
+        f"{me('warn', '⚠️')} <b>БЕЗ КОММЕНТАРИЯ TON НЕ ПРИДУТ!</b>\n\n"
+        f"Нажмите кнопку после оплаты: {me('down', '👇')}"
     )
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [ikb_button("Я ОПЛАТИЛ", callback_data="i_paid", emoji_key="paid")],
         [ikb_button("Назад", callback_data="start", emoji_key="back")]
     ])
-    await message.answer(text, reply_markup=kb, parse_mode="Markdown")
+    await message.answer(text, reply_markup=kb, parse_mode="HTML")
     await state.set_state(Order.waiting_confirm)
 
 
 @dp.callback_query(F.data == "i_paid", Order.waiting_confirm)
 async def confirm_payment_btn(callback: types.CallbackQuery, state: FSMContext):
-    await callback.message.edit_text("📥 Отправьте чек (фото/PDF) боту.\n⏱ Время выплаты: от 1 мин до 1 часа.")
+    text = (
+        f"{me('inbox', '📥')} Отправьте чек (фото/PDF) боту.\n"
+        f"{me('time', '⏱')} Время выплаты: от 1 мин до 1 часа."
+    )
+    await callback.message.edit_text(text, parse_mode="HTML")
     await state.set_state(Order.waiting_for_pdf)
 
 
 @dp.message(Order.waiting_for_pdf, F.document | F.photo)
 async def payment_received(message: types.Message, state: FSMContext):
     data = await state.get_data()
+    username = f"@{message.from_user.username}" if message.from_user.username else "NoUser"
     log = (
-        f"🎁 **ЗАКАЗ**\nКлиент: @{message.from_user.username or 'NoUser'}\n"
-        f"Сумма: `{data['amount']} TON` ({data['total_cost']} {data['currency']})\n"
-        f"Кошелек: `{data['wallet']}`"
+        f"{me('gift', '🎁')} <b>ЗАКАЗ</b>\n"
+        f"Клиент: {h(username)}\n"
+        f"Сумма: <code>{h(data['amount'])} TON</code> ({h(data['total_cost'])} {h(data['currency'])})\n"
+        f"Кошелек: <code>{h(data['wallet'])}</code>"
     )
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -244,13 +311,17 @@ async def payment_received(message: types.Message, state: FSMContext):
     for admin_id in ADMIN_IDS:
         try:
             if message.document:
-                await bot.send_document(admin_id, message.document.file_id, caption=log, reply_markup=kb, parse_mode="Markdown")
+                await bot.send_document(admin_id, message.document.file_id, caption=log, reply_markup=kb, parse_mode="HTML")
             else:
-                await bot.send_photo(admin_id, message.photo[-1].file_id, caption=log, reply_markup=kb, parse_mode="Markdown")
+                await bot.send_photo(admin_id, message.photo[-1].file_id, caption=log, reply_markup=kb, parse_mode="HTML")
         except Exception:
             pass
 
-    await message.answer("📡 Чек принят! Ожидайте уведомления.\n⏱ Время выплаты: от 1 минуты до 1 часа.")
+    user_text = (
+        f"{me('signal', '📡')} Чек принят! Ожидайте уведомления.\n"
+        f"{me('time', '⏱')} Время выплаты: от 1 минуты до 1 часа."
+    )
+    await message.answer(user_text, parse_mode="HTML")
     await state.clear()
 
 
@@ -271,15 +342,19 @@ async def admin_panel(message: types.Message):
             ikb_button("Рассылка", callback_data="adm_push", emoji_key="adm_push")
         ]
     ])
-    await message.answer("🛠 **МЕНЮ АДМИНИСТРАТОРА**", reply_markup=kb, parse_mode="Markdown")
+    await message.answer(
+        f"{me('tools', '🛠')} <b>МЕНЮ АДМИНИСТРАТОРА</b>",
+        reply_markup=kb,
+        parse_mode="HTML"
+    )
 
 
 @dp.callback_query(F.data == "adm_min", F.from_user.id.in_(ADMIN_IDS))
 async def adm_min(callback: types.CallbackQuery, state: FSMContext):
     await state.update_data(changing="min_buy")
     await callback.message.answer(
-        f"Текущая минималка: **{settings['min_buy']} TON**\nВведите новое значение:",
-        parse_mode="Markdown"
+        f"Текущая минималка: <b>{h(settings['min_buy'])} TON</b>\nВведите новое значение:",
+        parse_mode="HTML"
     )
     await state.set_state(AdminStates.waiting_for_reqs)
 
@@ -290,15 +365,19 @@ async def complete_order(callback: types.CallbackQuery):
     uid, curr, amt = params[1], params[2], params[3]
     update_stats(curr, amt)
     try:
-        await bot.send_message(
-            int(uid),
-            f"💎 **ЗАКАЗ ВЫПОЛНЕН!**\nTON отправлены.\n\n⏱ Время обработки составило менее часа.\nПоддержка: {SUPPORT_URL}",
-            parse_mode="Markdown"
+        user_text = (
+            f"{me('diamond', '💎')} <b>ЗАКАЗ ВЫПОЛНЕН!</b>\n"
+            f"TON отправлены.\n\n"
+            f"{me('time', '⏱')} Время обработки составило менее часа.\n"
+            f"Поддержка: {h(SUPPORT_URL)}"
         )
-        await callback.message.edit_caption(
-            caption=(callback.message.caption or "") + "\n\n✅ **ВЫПОЛНЕНО (СТАТИСТИКА+)**",
-            parse_mode="Markdown"
+        await bot.send_message(int(uid), user_text, parse_mode="HTML")
+
+        done_caption = (
+            f"{h(callback.message.caption or '')}\n\n"
+            f"{me('ok', '✅')} <b>ВЫПОЛНЕНО (СТАТИСТИКА+)</b>"
         )
+        await callback.message.edit_caption(caption=done_caption, parse_mode="HTML")
     except Exception:
         await callback.answer("Ошибка связи.")
 
@@ -312,15 +391,17 @@ async def adm_back(callback: types.CallbackQuery):
 async def adm_stats(callback: types.CallbackQuery):
     s = get_stats()
     text = (
-        f"📊 **СТАТИСТИКА ПРОДАЖ**\n\n🇺🇦 UAH: `{round(s['UAH_TON'], 2)} TON`\n🇷🇺 RUB: `{round(s['RUB_TON'], 2)} TON`"
-        f"\n\n✅ Успешных сделок: `{s['total_orders']}`"
+        f"{me('chart', '📊')} <b>СТАТИСТИКА ПРОДАЖ</b>\n\n"
+        f"{me('flag_uah', '🇺🇦')} UAH: <code>{h(round(s['UAH_TON'], 2))} TON</code>\n"
+        f"{me('flag_rub', '🇷🇺')} RUB: <code>{h(round(s['RUB_TON'], 2))} TON</code>\n\n"
+        f"{me('ok', '✅')} Успешных сделок: <code>{h(s['total_orders'])}</code>"
     )
     await callback.message.edit_text(
         text,
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [ikb_button("Назад", callback_data="admin_back", emoji_key="back")]
         ]),
-        parse_mode="Markdown"
+        parse_mode="HTML"
     )
 
 
@@ -334,8 +415,9 @@ async def adm_rates(callback: types.CallbackQuery):
         [ikb_button("Назад", callback_data="admin_back", emoji_key="back")]
     ])
     await callback.message.edit_text(
-        f"Курсы:\nUAH: {settings['uah_rate']}\nRUB: {settings['rub_rate']}",
-        reply_markup=kb
+        f"Курсы:\nUAH: {h(settings['uah_rate'])}\nRUB: {h(settings['rub_rate'])}",
+        reply_markup=kb,
+        parse_mode="HTML"
     )
 
 
@@ -368,8 +450,9 @@ async def adm_comm(callback: types.CallbackQuery):
         [ikb_button("Назад", callback_data="admin_back", emoji_key="back")]
     ])
     await callback.message.edit_text(
-        f"UA: {settings['uah_comm']}\nRU: {settings['rub_comm']}",
-        reply_markup=kb
+        f"UA: {h(settings['uah_comm'])}\nRU: {h(settings['rub_comm'])}",
+        reply_markup=kb,
+        parse_mode="HTML"
     )
 
 
@@ -394,7 +477,7 @@ async def save_value(message: types.Message, state: FSMContext):
     else:
         settings[key] = message.text
 
-    await message.answer("✅ Успешно обновлено!")
+    await message.answer(f"{me('ok', '✅')} Успешно обновлено!", parse_mode="HTML")
     await state.clear()
 
 
@@ -413,15 +496,20 @@ async def push_finish(message: types.Message, state: FSMContext):
         users = f.read().splitlines()
 
     count = 0
+    safe_broadcast_text = h(message.text or "")
     for u_id in users:
         try:
-            await bot.send_message(u_id, f"🔔 **УВЕДОМЛЕНИЕ**\n\n{message.text}", parse_mode="Markdown")
+            broadcast_text = (
+                f"{me('bell', '🔔')} <b>УВЕДОМЛЕНИЕ</b>\n\n"
+                f"{safe_broadcast_text}"
+            )
+            await bot.send_message(u_id, broadcast_text, parse_mode="HTML")
             count += 1
             await asyncio.sleep(0.05)
         except Exception:
             pass
 
-    await message.answer(f"✅ Готово! Отправлено: {count}")
+    await message.answer(f"{me('ok', '✅')} Готово! Отправлено: {h(count)}", parse_mode="HTML")
     await state.clear()
 
 
