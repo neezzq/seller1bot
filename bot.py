@@ -30,15 +30,15 @@ EMOJI_IDS = {
     "adm_stats": "5231200819986047254",
     "adm_push": "5825586339126452204",
 
-    "set_uah_rate": "",
-    "set_rub_rate": "",
-    "set_uah_card": "",
-    "set_uah_name": "",
-    "set_rub_phone": "",
-    "set_rub_name": "",
-    "set_rub_bank": "",
-    "set_uah_comm": "",
-    "set_rub_comm": "",
+    "set_uah_rate": "5445118241758257251",
+    "set_rub_rate": "5398017006165305287",
+    "set_uah_card": "5445118241758257251",
+    "set_uah_name": "5445118241758257251",
+    "set_rub_phone": "5398017006165305287",
+    "set_rub_name": "5398017006165305287",
+    "set_rub_bank": "5398017006165305287",
+    "set_uah_comm": "5445118241758257251",
+    "set_rub_comm": "5398017006165305287",
 }
 
 # Глобальные настройки
