@@ -72,10 +72,22 @@ async def cmd_start(event: types.Message | types.CallbackQuery, state: FSMContex
     user_id = event.from_user.id if isinstance(event, types.Message) else event.message.chat.id
     log_user(user_id)
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🇺🇦 Купить за UAH", callback_data="buy_UAH")],
-        [InlineKeyboardButton(text="🇷🇺 Купить за RUB", callback_data="buy_RUB")],
-        [InlineKeyboardButton(text="👨‍💻 Поддержка", url=SUPPORT_URL)]
-    ])
+    [InlineKeyboardButton(
+        text="Купить за UAH",
+        callback_data="buy_UAH",
+        icon_custom_emoji_id="5445118241758257251"
+    )],
+    [InlineKeyboardButton(
+        text="Купить за RUB",
+        callback_data="buy_RUB",
+        icon_custom_emoji_id="5398017006165305287"
+    )],
+    [InlineKeyboardButton(
+        text="Поддержка",
+        url=SUPPORT_URL,
+        icon_custom_emoji_id="5818967120213445821"
+    )]
+])
     text = "👋 Добро пожаловать в **Seller TON**!\n\nВыберите валюту оплаты ниже: 👇"
     if isinstance(event, types.Message): 
         await event.answer(text, reply_markup=kb, parse_mode="Markdown")
