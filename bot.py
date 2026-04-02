@@ -10,14 +10,15 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # --- КОНФИГУРАЦИЯ ---
-API_TOKEN = '8732609892:AAEre0vM4ktZGTMejTuhcWIy6cGmGvjqn34'
+API_TOKEN = '8286778160:AAHftyjLgM4cgjXovY2LMCwPbpfeHW0-vig'
 ADMIN_IDS = [8141992001, 1825486156]
 SUPPORT_URL = "tg://resolve?domain=sellerblume"
 
-# Настройки по умолчанию
+# Глобальные настройки
 settings = {
     "uah_rate": 45.0, "rub_rate": 105.0,
     "uah_margin": 10.0, "rub_margin": 15.0,
+    "min_buy": 1.5, # Твоя минималка по умолчанию
     "uah_card": "0000 0000 0000 0000", "uah_bank": "Monobank", "uah_name": "Ivan I.", "uah_comm": "На річницю",
     "rub_phone": "+79000000000", "rub_bank": "Sberbank (SBP)", "rub_name": "Ivan I.", "rub_comm": "На годовщину"
 }
@@ -84,9 +85,8 @@ async def cmd_start(event: types.Message | types.CallbackQuery, state: FSMContex
 @dp.callback_query(F.data.startswith("buy_"))
 async def process_buy(callback: types.CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
-    curr = callback.data.split("_")[1] # Исправлено: берем UAH или RUB
+    curr = callback.data.split("_")[1] 
     
-    # Антиспам 60 сек
     curr_t = time.time()
     if user_id in last_order_time and curr_t - last_order_time[user_id] < 60:
         return await callback.answer(f"⏳ Подождите минуту перед новой заявкой", show_alert=True)
@@ -99,8 +99,11 @@ async def process_buy(callback: types.CallbackQuery, state: FSMContext):
     last_order_time[user_id] = curr_t
     
     await callback.message.edit_text(
-        f"💎 Покупка TON за {curr}\n📊 Курс: {final_rate} {curr}/TON\n\nВведите кол-во TON:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="start")]])
+        f"💎 Покупка TON за {curr}\n📊 Курс: {final_rate} {curr}/TON\n\n"
+        f"⚠️ Минимальная покупка: **{settings['min_buy']} TON**\n\n"
+        f"Введите количество TON:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="start")]]),
+        parse_mode="Markdown"
     )
     await state.set_state(Order.entering_amount)
 
@@ -108,6 +111,9 @@ async def process_buy(callback: types.CallbackQuery, state: FSMContext):
 async def amount_step(message: types.Message, state: FSMContext):
     try:
         amount = float(message.text.replace(',', '.'))
+        if amount < settings['min_buy']:
+            return await message.answer(f"❌ Минимальная сумма покупки — **{settings['min_buy']} TON**.\nВведите сумму побольше:", parse_mode="Markdown")
+        
         data = await state.get_data()
         total = round(amount * data['final_rate'], 2)
         await state.update_data(amount=amount, total_cost=total)
@@ -169,17 +175,16 @@ async def payment_received(message: types.Message, state: FSMContext):
 async def admin_panel(message: types.Message):
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📈 Курсы", callback_data="adm_rates"), InlineKeyboardButton(text="💳 Реквизиты", callback_data="adm_reqs")],
-        [InlineKeyboardButton(text="💬 Комменты", callback_data="adm_comm"), InlineKeyboardButton(text="📊 Статистика", callback_data="adm_stats")],
-        [InlineKeyboardButton(text="📢 Рассылка", callback_data="adm_push")]
+        [InlineKeyboardButton(text="💬 Комменты", callback_data="adm_comm"), InlineKeyboardButton(text="📦 Мин. покупка", callback_data="adm_min")],
+        [InlineKeyboardButton(text="📊 Статистика", callback_data="adm_stats"), InlineKeyboardButton(text="📢 Рассылка", callback_data="adm_push")]
     ])
     await message.answer("🛠 **МЕНЮ АДМИНИСТРАТОРА**", reply_markup=kb, parse_mode="Markdown")
 
-@dp.callback_query(F.data == "adm_stats", F.from_user.id.in_(ADMIN_IDS))
-async def adm_stats(callback: types.CallbackQuery):
-    s = get_stats()
-    text = (f"📊 **СТАТИСТИКА ПРОДАЖ**\n\n🇺🇦 UAH: `{round(s['UAH_TON'], 2)} TON`\n🇷🇺 RUB: `{round(s['RUB_TON'], 2)} TON`"
-            f"\n\n✅ Успешных сделок: `{s['total_orders']}`")
-    await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Назад", callback_data="admin_back")]]), parse_mode="Markdown")
+@dp.callback_query(F.data == "adm_min", F.from_user.id.in_(ADMIN_IDS))
+async def adm_min(callback: types.CallbackQuery, state: FSMContext):
+    await state.update_data(changing="min_buy")
+    await callback.message.answer(f"Текущая минималка: **{settings['min_buy']} TON**\nВведите новое значение:", parse_mode="Markdown")
+    await state.set_state(AdminStates.waiting_for_reqs)
 
 @dp.callback_query(F.data.startswith("done_"), F.from_user.id.in_(ADMIN_IDS))
 async def complete_order(callback: types.CallbackQuery):
@@ -193,6 +198,13 @@ async def complete_order(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data == "admin_back", F.from_user.id.in_(ADMIN_IDS))
 async def adm_back(callback: types.CallbackQuery): await admin_panel(callback.message)
+
+@dp.callback_query(F.data == "adm_stats", F.from_user.id.in_(ADMIN_IDS))
+async def adm_stats(callback: types.CallbackQuery):
+    s = get_stats()
+    text = (f"📊 **СТАТИСТИКА ПРОДАЖ**\n\n🇺🇦 UAH: `{round(s['UAH_TON'], 2)} TON`\n🇷🇺 RUB: `{round(s['RUB_TON'], 2)} TON`"
+            f"\n\n✅ Успешных сделок: `{s['total_orders']}`")
+    await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Назад", callback_data="admin_back")]]), parse_mode="Markdown")
 
 @dp.callback_query(F.data == "adm_rates", F.from_user.id.in_(ADMIN_IDS))
 async def adm_rates(callback: types.CallbackQuery):
@@ -223,13 +235,13 @@ async def adm_comm(callback: types.CallbackQuery):
 async def set_value(callback: types.CallbackQuery, state: FSMContext):
     key = callback.data.replace("set_", "")
     await state.update_data(changing=key)
-    await callback.message.answer(f"Введите новое значение для {key}:")
+    await callback.message.answer(f"Введите новое значение:")
     await state.set_state(AdminStates.waiting_for_reqs)
 
 @dp.message(AdminStates.waiting_for_reqs, F.from_user.id.in_(ADMIN_IDS))
 async def save_value(message: types.Message, state: FSMContext):
     data = await state.get_data(); key = data['changing']
-    if "rate" in key:
+    if key in ["uah_rate", "rub_rate", "min_buy"]:
         try: settings[key] = float(message.text.replace(',','.'))
         except: return await message.answer("Введите число.")
     else: settings[key] = message.text
