@@ -10,7 +10,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # --- КОНФИГУРАЦИЯ ---
-API_TOKEN = '8286778160:AAHftyjLgM4cgjXovY2LMCwPbpfeHW0-vig'
+API_TOKEN = '8732609892:AAEre0vM4ktZGTMejTuhcWIy6cGmGvjqn34'
 ADMIN_IDS = [8141992001, 1825486156]
 SUPPORT_URL = "tg://resolve?domain=sellerblume"
 
